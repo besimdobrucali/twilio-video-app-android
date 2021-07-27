@@ -45,7 +45,6 @@
             android:drawablePadding="4dp"
             android:layout_marginTop="100dp"
             android:layout_marginEnd="16dp"
-            android:layout_marginRight="16dp"
             android:visibility="gone"
             tools:visibility="visible"
             android:layout_gravity="end" />
@@ -94,9 +93,17 @@
             android:layout_width="match_parent"
             android:layout_height="match_parent"
             android:layout_marginEnd="@dimen/fab_margin"
-            android:layout_marginRight="@dimen/fab_margin"
             android:orientation="vertical"
             android:gravity="end|bottom">
+
+            <androidx.appcompat.widget.AppCompatImageButton
+                android:id="@+id/start_detection"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="@dimen/fab_margin"
+                android:background="@drawable/roundbutton"
+                app:backgroundTint="@android:color/holo_red_dark"
+                app:srcCompat="@drawable/ic_videocam_white_24px" />
 
             <androidx.appcompat.widget.AppCompatImageButton
                 android:id="@+id/local_video"
@@ -152,7 +159,6 @@
                 style="@style/AppTheme.Lobby.Drawer"
                 android:textSize="20sp"
                 android:layout_marginTop="@dimen/activity_horizontal_margin"
-                android:layout_marginRight="@dimen/activity_horizontal_margin"
                 android:layout_gravity="end"
                 android:layout_marginEnd="@dimen/activity_horizontal_margin"/>
 

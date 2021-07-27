@@ -58,7 +58,7 @@ android {
     defaultConfig {
         applicationId "com.twilio.video.app"
 
-        minSdkVersion 16
+        minSdkVersion 21
         targetSdkVersion 30
 
         versionName "0.1.0"
@@ -184,6 +184,12 @@ dependencies {
     implementation 'com.squareup.okhttp3:logging-interceptor:3.11.0'
     implementation 'com.twilio:audioswitch:1.1.2'
     implementation "org.uniflow-kt:uniflow-android:$uniflowVersion"
+
+    // opencv 4.3.0
+    implementation 'com.quickbirdstudios:opencv:4.3.0'
+
+    // HomVitals 4.3.0
+    implementation 'com.hospitalonmobile.vitals:HomVitals:1.0.13.0'
 
     /*
      * Include as a compile time only dependency so Android Studio can resolve references

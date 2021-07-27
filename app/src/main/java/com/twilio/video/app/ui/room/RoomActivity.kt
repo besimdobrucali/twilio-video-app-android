@@ -27,6 +27,7 @@ import android.content.DialogInterface
 import android.content.Intent
 import android.content.SharedPreferences
 import android.content.pm.PackageManager
+import android.graphics.Bitmap
 import android.media.AudioManager
 import android.media.projection.MediaProjectionManager
 import android.net.Uri
@@ -37,16 +38,22 @@ import android.view.Menu
 import android.view.MenuItem
 import android.view.View
 import android.view.WindowManager
+import android.widget.Toast
 import androidx.core.content.ContextCompat
 import androidx.core.widget.doOnTextChanged
 import androidx.lifecycle.ViewModelProvider
 import androidx.recyclerview.widget.LinearLayoutManager
 import com.google.android.material.snackbar.BaseTransientBottomBar
 import com.google.android.material.snackbar.Snackbar
+import com.google.gson.Gson
+import com.google.gson.reflect.TypeToken
+import com.hospitalonmobile.vitals.HoMCameraException
+import com.hospitalonmobile.vitals.HoMCameraView
+import com.hospitalonmobile.vitals.HoMFrameDetection
+import com.hospitalonmobile.vitals.entity.AllDetectionResultModel
+import com.hospitalonmobile.vitals.entity.HeartRateVariability
 import com.twilio.audioswitch.AudioDevice
-import com.twilio.audioswitch.AudioDevice.BluetoothHeadset
-import com.twilio.audioswitch.AudioDevice.Speakerphone
-import com.twilio.audioswitch.AudioDevice.WiredHeadset
+import com.twilio.audioswitch.AudioDevice.*
 import com.twilio.audioswitch.AudioSwitch
 import com.twilio.video.app.R
 import com.twilio.video.app.adapter.StatsListAdapter
@@ -59,36 +66,19 @@ import com.twilio.video.app.participant.ParticipantViewState
 import com.twilio.video.app.sdk.RoomManager
 import com.twilio.video.app.ui.room.RoomViewConfiguration.Connecting
 import com.twilio.video.app.ui.room.RoomViewConfiguration.Lobby
-import com.twilio.video.app.ui.room.RoomViewEffect.Connected
-import com.twilio.video.app.ui.room.RoomViewEffect.Disconnected
-import com.twilio.video.app.ui.room.RoomViewEffect.PermissionsDenied
-import com.twilio.video.app.ui.room.RoomViewEffect.ShowConnectFailureDialog
-import com.twilio.video.app.ui.room.RoomViewEffect.ShowMaxParticipantFailureDialog
-import com.twilio.video.app.ui.room.RoomViewEffect.ShowTokenErrorDialog
-import com.twilio.video.app.ui.room.RoomViewEvent.ActivateAudioDevice
-import com.twilio.video.app.ui.room.RoomViewEvent.Connect
-import com.twilio.video.app.ui.room.RoomViewEvent.DeactivateAudioDevice
-import com.twilio.video.app.ui.room.RoomViewEvent.DisableLocalAudio
-import com.twilio.video.app.ui.room.RoomViewEvent.DisableLocalVideo
-import com.twilio.video.app.ui.room.RoomViewEvent.Disconnect
-import com.twilio.video.app.ui.room.RoomViewEvent.EnableLocalAudio
-import com.twilio.video.app.ui.room.RoomViewEvent.EnableLocalVideo
-import com.twilio.video.app.ui.room.RoomViewEvent.OnPause
-import com.twilio.video.app.ui.room.RoomViewEvent.OnResume
-import com.twilio.video.app.ui.room.RoomViewEvent.SelectAudioDevice
-import com.twilio.video.app.ui.room.RoomViewEvent.StartScreenCapture
-import com.twilio.video.app.ui.room.RoomViewEvent.StopScreenCapture
-import com.twilio.video.app.ui.room.RoomViewEvent.SwitchCamera
-import com.twilio.video.app.ui.room.RoomViewEvent.ToggleLocalAudio
-import com.twilio.video.app.ui.room.RoomViewEvent.ToggleLocalVideo
+import com.twilio.video.app.ui.room.RoomViewEffect.*
+import com.twilio.video.app.ui.room.RoomViewEvent.*
 import com.twilio.video.app.ui.room.RoomViewModel.RoomViewModelFactory
 import com.twilio.video.app.ui.settings.SettingsActivity
 import com.twilio.video.app.util.InputUtils
 import com.twilio.video.app.util.PermissionUtil
+import com.twilio.video.app.util.toMat
 import io.uniflow.android.livedata.onEvents
 import io.uniflow.android.livedata.onStates
-import javax.inject.Inject
+import org.opencv.android.Utils
 import timber.log.Timber
+import javax.inject.Inject
+
 
 class RoomActivity : BaseActivity() {
     private lateinit var binding: RoomActivityBinding
@@ -121,6 +111,10 @@ class RoomActivity : BaseActivity() {
     private lateinit var roomViewModel: RoomViewModel
     private lateinit var recordingAnimation: ObjectAnimator
 
+    private val homFrameDetection: HoMFrameDetection by lazy {
+        HoMFrameDetection(this)
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         binding = RoomActivityBinding.inflate(layoutInflater)
@@ -152,7 +146,86 @@ class RoomActivity : BaseActivity() {
         // Setup participant controller
         primaryParticipantController = PrimaryParticipantController(binding.room.primaryVideo)
 
-        setupRecordingAnimation()
+        homFrameDetection.initialization(lifeCycleOwner = this, HoMCameraView.DetectionType.SELFIE_ALL)
+
+        addHomFrameDetectionListener()
+
+        binding.room.primaryVideo.setFrameListener {
+            val frameMat = it.toMat()
+            /*val bitmap = Bitmap.createBitmap(
+                frameMat.size().width.toInt(),
+                frameMat.size().height.toInt(),
+                Bitmap.Config.ARGB_8888
+            )
+            bitmap?.let {
+                Utils.matToBitmap(frameMat, bitmap)
+            }
+            val b = bitmap*/
+            homFrameDetection.addCameraFrame(frameMat, it.timestampNs / 1_000_000)
+        }
+
+        binding.startDetection?.setOnClickListener {
+            homFrameDetection.startDetection()
+        }
+    }
+
+    private fun addHomFrameDetectionListener() {
+        homFrameDetection.setOnDetectionListener(object : HoMCameraView.DetectionListener {
+
+            override fun onDetectionStateChanged(state: HoMCameraView.DetectionState) {
+                when (state) {
+                    HoMCameraView.DetectionState.READY -> {
+
+                    }
+                    HoMCameraView.DetectionState.DETECTING -> {
+                        Toast.makeText(this@RoomActivity, "Detecting", Toast.LENGTH_SHORT).show()
+                    }
+                    HoMCameraView.DetectionState.COLLECTING -> {
+                        Toast.makeText(this@RoomActivity, "Collecting", Toast.LENGTH_SHORT).show()
+                    }
+                    HoMCameraView.DetectionState.CALCULATING -> {
+                        Toast.makeText(this@RoomActivity, "Calculating", Toast.LENGTH_SHORT).show()
+                    }
+                    HoMCameraView.DetectionState.COMPLETED -> {
+                        Toast.makeText(this@RoomActivity, "Completed", Toast.LENGTH_SHORT).show()
+                    }
+                }
+            }
+
+            override fun onError(error: HoMCameraException?) {
+                Toast.makeText(this@RoomActivity, error!!.message, Toast.LENGTH_SHORT).show()
+            }
+
+            override fun onHRVResult(result: HeartRateVariability) {
+
+            }
+
+            override fun onResult(result: Double) {
+
+            }
+
+            override fun onAllResult(result: AllDetectionResultModel) {
+                val resultMap = getDetectionResultMap(result)
+                val builder = StringBuilder()
+                resultMap.forEach {
+                    builder.append(" ${it.key} ${it.value} \n")
+                }
+                val message = builder.toString()
+                Toast.makeText(this@RoomActivity, message, Toast.LENGTH_SHORT).show()
+                roomManager.sendDataTrackMessage(message)
+            }
+        })
+    }
+
+    private fun getDetectionResultMap(result: Any): HashMap<String, Double> {
+        val mapType = object : TypeToken<Map<String, Double>>() {}.type
+        val gson = Gson()
+        val resultMap: Map<String, Double> = gson.fromJson(gson.toJson(result), mapType)
+        val detectionResult = hashMapOf<String, Double>()
+        resultMap.map {
+            detectionResult[it.key] = it.value
+        }
+        return detectionResult
     }
 
     override fun onDestroy() {
@@ -282,7 +355,7 @@ class RoomActivity : BaseActivity() {
     private fun setupRecordingAnimation() {
         val recordingDrawable = ContextCompat.getDrawable(this, R.drawable.ic_recording)
         recordingAnimation = ObjectAnimator.ofPropertyValuesHolder(recordingDrawable,
-                PropertyValuesHolder.ofInt("alpha", 100, 255)).apply {
+            PropertyValuesHolder.ofInt("alpha", 100, 255)).apply {
             target = recordingDrawable
             duration = 750
             repeatCount = ValueAnimator.INFINITE
@@ -290,7 +363,7 @@ class RoomActivity : BaseActivity() {
             start()
         }
         binding.recordingIndicator.setCompoundDrawablesWithIntrinsicBounds(
-                recordingDrawable, null, null, null)
+            recordingDrawable, null, null, null)
     }
 
     private fun checkIntentURI(): Boolean {
@@ -309,8 +382,8 @@ class RoomActivity : BaseActivity() {
         binding.room.remoteVideoThumbnails.layoutManager = layoutManager
         participantAdapter = ParticipantAdapter()
         participantAdapter
-                .viewHolderEvents
-                .observe(this, { viewEvent: RoomViewEvent -> roomViewModel.processInput(viewEvent) })
+            .viewHolderEvents
+            .observe(this, { viewEvent: RoomViewEvent -> roomViewModel.processInput(viewEvent) })
         binding.room.remoteVideoThumbnails.adapter = participantAdapter
     }
 
@@ -346,10 +419,10 @@ class RoomActivity : BaseActivity() {
     private fun requestPermissions() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
             requestPermissions(arrayOf(
-                    Manifest.permission.RECORD_AUDIO,
-                    Manifest.permission.CAMERA
+                Manifest.permission.RECORD_AUDIO,
+                Manifest.permission.CAMERA
             ),
-                    PERMISSIONS_REQUEST_CODE)
+                PERMISSIONS_REQUEST_CODE)
         }
     }
 
@@ -390,7 +463,7 @@ class RoomActivity : BaseActivity() {
                 toolbarTitle = roomName
                 joinStatus = ""
                 binding.recordingIndicator.visibility =
-                        if (roomViewState.isRecording) View.VISIBLE else View.GONE
+                    if (roomViewState.isRecording) View.VISIBLE else View.GONE
             }
             Lobby -> {
                 connectButtonEnabled = isRoomTextNotEmpty
@@ -433,7 +506,7 @@ class RoomActivity : BaseActivity() {
                 R.drawable.ic_screen_share_white_24dp to getString(R.string.share_screen)
             }
             screenCaptureMenuItem.icon = ContextCompat.getDrawable(this,
-                    screenCaptureResources.first)
+                screenCaptureResources.first)
             screenCaptureMenuItem.title = screenCaptureResources.second
         }
     }
@@ -463,12 +536,12 @@ class RoomActivity : BaseActivity() {
 
         // This initiates a prompt dialog for the user to confirm screen projection.
         startActivityForResult(
-                mediaProjectionManager.createScreenCaptureIntent(), MEDIA_PROJECTION_REQUEST_CODE)
+            mediaProjectionManager.createScreenCaptureIntent(), MEDIA_PROJECTION_REQUEST_CODE)
     }
 
     private fun updateStatsUI(roomViewState: RoomViewState) {
         val enableStats = sharedPreferences.getBoolean(
-                Preferences.ENABLE_STATS, Preferences.ENABLE_STATS_DEFAULT)
+            Preferences.ENABLE_STATS, Preferences.ENABLE_STATS_DEFAULT)
         if (enableStats) {
             when (roomViewState.configuration) {
                 RoomViewConfiguration.Connected -> {
@@ -529,10 +602,10 @@ class RoomActivity : BaseActivity() {
             }
             ShowConnectFailureDialog, ShowMaxParticipantFailureDialog -> {
                 AlertDialog.Builder(this, R.style.AppTheme_Dialog)
-                        .setTitle(getString(R.string.room_screen_connection_failure_title))
-                        .setMessage(getConnectFailureMessage(roomViewEffect))
-                        .setNeutralButton(getString(android.R.string.ok), null)
-                        .show()
+                    .setTitle(getString(R.string.room_screen_connection_failure_title))
+                    .setMessage(getConnectFailureMessage(roomViewEffect))
+                    .setNeutralButton(getString(android.R.string.ok), null)
+                    .show()
                 toggleAudioDevice(false)
             }
             is ShowTokenErrorDialog -> {
@@ -544,12 +617,12 @@ class RoomActivity : BaseActivity() {
     }
 
     private fun getConnectFailureMessage(roomViewEffect: RoomViewEffect) =
-            getString(
-                    when (roomViewEffect) {
-                        ShowMaxParticipantFailureDialog -> R.string.room_screen_max_participant_failure_message
-                        else -> R.string.room_screen_connection_failure_message
-                    }
-            )
+        getString(
+            when (roomViewEffect) {
+                ShowMaxParticipantFailureDialog -> R.string.room_screen_max_participant_failure_message
+                else -> R.string.room_screen_connection_failure_message
+            }
+        )
 
     private fun updateAudioDeviceIcon(selectedAudioDevice: AudioDevice?) {
         val audioDeviceMenuIcon = when (selectedAudioDevice) {
@@ -564,11 +637,11 @@ class RoomActivity : BaseActivity() {
     private fun renderPrimaryView(primaryParticipant: ParticipantViewState) {
         primaryParticipant.run {
             primaryParticipantController.renderAsPrimary(
-                    if (isLocalParticipant) getString(R.string.you) else identity,
-                    screenTrack,
-                    videoTrack,
-                    isMuted,
-                    isMirrored)
+                if (isLocalParticipant) getString(R.string.you) else identity,
+                screenTrack,
+                videoTrack,
+                isMuted,
+                isMirrored)
             binding.room.primaryVideo.showIdentityBadge(!primaryParticipant.isLocalParticipant)
         }
     }
@@ -590,15 +663,15 @@ class RoomActivity : BaseActivity() {
                     audioDeviceNames.add(a.name)
                 }
                 createAudioDeviceDialog(
-                        this,
-                        index,
-                        audioDeviceNames
+                    this,
+                    index,
+                    audioDeviceNames
                 ) { dialogInterface: DialogInterface, i: Int ->
                     dialogInterface.dismiss()
                     val viewEvent = SelectAudioDevice(audioDevices[i])
                     roomViewModel.processInput(viewEvent)
                 }
-                        .show()
+                    .show()
             }
         }
     }
@@ -612,19 +685,19 @@ class RoomActivity : BaseActivity() {
         val builder = AlertDialog.Builder(activity, R.style.AppTheme_Dialog)
         builder.setTitle(activity.getString(R.string.room_screen_select_device))
         builder.setSingleChoiceItems(
-                availableDevices.toTypedArray<CharSequence>(),
-                currentDevice,
-                audioDeviceClickListener)
+            availableDevices.toTypedArray<CharSequence>(),
+            currentDevice,
+            audioDeviceClickListener)
         return builder.create()
     }
 
     private fun handleTokenError(error: AuthServiceError?) {
         val errorMessage = if (error === AuthServiceError.EXPIRED_PASSCODE_ERROR) R.string.room_screen_token_expired_message else R.string.room_screen_token_retrieval_failure_message
         AlertDialog.Builder(this, R.style.AppTheme_Dialog)
-                .setTitle(getString(R.string.room_screen_connection_failure_title))
-                .setMessage(getString(errorMessage))
-                .setNeutralButton(getString(android.R.string.ok), null)
-                .show()
+            .setTitle(getString(R.string.room_screen_connection_failure_title))
+            .setMessage(getString(errorMessage))
+            .setNeutralButton(getString(android.R.string.ok), null)
+            .show()
     }
 
     companion object {

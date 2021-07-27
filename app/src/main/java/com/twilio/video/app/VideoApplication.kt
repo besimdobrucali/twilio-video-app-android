@@ -19,11 +19,13 @@ package com.twilio.video.app
 import android.app.Application
 import android.content.Context
 import androidx.multidex.MultiDex
+import com.hospitalonmobile.vitals.HomVitals
 import dagger.android.AndroidInjector
 import dagger.android.DispatchingAndroidInjector
 import dagger.android.HasAndroidInjector
-import javax.inject.Inject
+import org.opencv.android.OpenCVLoader
 import timber.log.Timber
+import javax.inject.Inject
 
 class VideoApplication : Application(), HasAndroidInjector {
     @Inject
@@ -40,14 +42,22 @@ class VideoApplication : Application(), HasAndroidInjector {
         super.onCreate()
 
         DaggerVideoApplicationComponent
-                .builder()
-                .applicationModule(ApplicationModule(this))
-                .build()
-                .inject(this)
+            .builder()
+            .applicationModule(ApplicationModule(this))
+            .build()
+            .inject(this)
 
         Timber.plant(tree)
 
         startAppcenter(this)
+
+        if (!OpenCVLoader.initDebug()) {
+            Timber.e("Unable to load OpenCV")
+        } else {
+            Timber.d("OpenCV loaded")
+        }
+
+        HomVitals.initialize("bcdtBj0XYe9JjnmpGukEo7tf5eNUzWkiaSO4GFfM")
     }
 
     override fun androidInjector(): AndroidInjector<Any> {

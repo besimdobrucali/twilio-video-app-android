@@ -97,6 +97,15 @@
             android:gravity="end|bottom">
 
             <androidx.appcompat.widget.AppCompatImageButton
+                android:id="@+id/start_detection"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="@dimen/fab_margin"
+                android:background="@drawable/roundbutton"
+                app:backgroundTint="@android:color/holo_red_dark"
+                app:srcCompat="@drawable/ic_videocam_white_24px" />
+
+            <androidx.appcompat.widget.AppCompatImageButton
                 android:id="@+id/local_video"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"

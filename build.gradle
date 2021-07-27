@@ -201,5 +201,12 @@ allprojects {
         maven {
             url 'https://jitpack.io'
         }
+        maven {
+            url "s3://dev.maven.hospitalonmobile.com/snapshot/"
+            credentials(AwsCredentials) {
+                accessKey "AccessKey"
+                secretKey "SecretKey"
+            }
+        }
     }
 }

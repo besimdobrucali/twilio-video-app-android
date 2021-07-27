@@ -19,6 +19,7 @@ import android.content.Context
 import android.util.AttributeSet
 import android.view.LayoutInflater
 import com.twilio.video.app.databinding.ParticipantPrimaryViewBinding
+import tvi.webrtc.VideoFrame
 
 internal class ParticipantPrimaryView @JvmOverloads constructor(
     context: Context,
@@ -26,8 +27,10 @@ internal class ParticipantPrimaryView @JvmOverloads constructor(
     defStyleAttr: Int = 0
 ) : ParticipantView(context, attrs, defStyleAttr) {
 
+    private var frameListener: ((VideoFrame) -> Unit)? = null
+
     private val binding: ParticipantPrimaryViewBinding =
-            ParticipantPrimaryViewBinding.inflate(LayoutInflater.from(context), this, true)
+        ParticipantPrimaryViewBinding.inflate(LayoutInflater.from(context), this, true)
     init {
         videoLayout = binding.videoLayout
         videoIdentity = binding.videoIdentity
@@ -44,4 +47,17 @@ internal class ParticipantPrimaryView @JvmOverloads constructor(
     fun showIdentityBadge(show: Boolean) {
         binding.videoIdentity.visibility = if (show) VISIBLE else GONE
     }
+
+    override fun onFrame(videoFrame: VideoFrame?) {
+        videoFrame?.let {
+            frameListener?.invoke(videoFrame)
+        }
+        super.onFrame(videoFrame)
+    }
+
+    @JvmName("setCustomFrameListener")
+    fun setFrameListener(frameListener: (VideoFrame) -> Unit){
+        this.frameListener = frameListener
+    }
+
 }

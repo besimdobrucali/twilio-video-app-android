@@ -16,6 +16,7 @@
 
 package com.twilio.video.app.ui.login;
 
+import android.annotation.SuppressLint;
 import android.app.AlertDialog;
 import android.os.Bundle;
 import android.text.Editable;
@@ -60,6 +61,7 @@ public class CommunityLoginActivity extends BaseActivity {
             };
     CompositeDisposable disposable = new CompositeDisposable();
 
+    @SuppressLint("SetTextI18n")
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -67,6 +69,10 @@ public class CommunityLoginActivity extends BaseActivity {
         binding.name.addTextChangedListener(textWatcher);
         binding.passcode.addTextChangedListener(textWatcher);
         colorButtonText = ResourcesCompat.getColor(getResources(), R.color.colorButtonText, null);
+
+        binding.name.setText("chat");
+        binding.passcode.setText("47929037235061");
+
         setupLoginButton();
         setContentView(binding.getRoot());
         if (authenticator.loggedIn()) startLobbyActivity();
